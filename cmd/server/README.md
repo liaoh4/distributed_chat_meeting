@@ -78,12 +78,12 @@ rm -rf data/*
 docker compose build
 docker compose up -d
 
-# 临时启动 node 并用join加入 raft
-docker compose --profile extra up -d node4
+# 临时启动 node 并用join加入 raft ,可以通过非leader节点join，因为follower可以转发join请求给leader
+docker compose --profile extra up -d node5
 
-curl -X POST http://localhost:8081/join \
+curl -X POST http://localhost:8082/join \
   -H 'Content-Type: application/json' \
-  -d '{"ID":"node4","RaftAddr":"node4:12004"}'
+  -d '{"ID":"node5","RaftAddr":"node5:12005"}'
 
 
 # 查看状态
@@ -93,15 +93,15 @@ curl -s http://localhost:8083/status | jq
 
 
 # 节点自行退出
-curl -X POST http://localhost:8083/leave
+curl -X POST http://localhost:8085/leave
 
 
 # leader移除节点 node2
-curl -X DELETE http://localhost:8081/nodes/node2
+curl -X DELETE http://localhost:8081/nodes/node5
 
-docker rm -f distributed_chat_meeting-node2-1
+docker rm -f distributed_chat_meeting-node5-1
 
-rm -rf ./data/node2
+rm -rf ./data/node5
 
 
 # docker临时停止节点
@@ -127,7 +127,7 @@ rm -rf ./data/node4              # 可选：清空它的旧数据，避免脏配
 # 发消息
 curl -X POST http://localhost:8083/api/v1/message \
   -H 'Content-Type: application/json' \
-  -d '{"conv_id":"general","sender":"node3","payload":"nonde 4, exit","vector_clock":{"alice":1}}'
+  -d '{"conv_id":"general","sender":"node1","payload":"Node 5 leaves","vector_clock":{"Cici":1}}'
 
 # 订阅（观察顺序）
 curl http://localhost:8081/api/v1/stream
@@ -157,7 +157,7 @@ docker compose logs node3 --tail=80
 
 # 测试完后清理临时节点
 curl -X DELETE http://localhost:8081/nodes/node4  # 先从raft配置删除，leader节点才能执行该操作
-docker compose rm -sf node4 node5  #在停止并移除容器
+docker compose rm -sf node4 node5  #停止并移除容器
 
 # 关闭并清除所有数据
 docker compose down -v --remove-orphans

@@ -75,8 +75,8 @@ services:
       HTTP_ADDR: ":8085"
       RAFT_ADDR: "node5:12005"    
     ports:
-      - "8084:8084" 
-      - "12004:12004" 
+      - "8085:8085" 
+      - "12005:12005" 
     tmpfs:
       - /data:rw,size=64m,mode=777
 
@@ -84,6 +84,4 @@ volumes:
   node1-data:
   node2-data:
   node3-data:
-  node4-data:
-  node5-data:
 

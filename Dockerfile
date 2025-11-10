@@ -18,7 +18,9 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates && adduser -D -u 10001 appuser
 WORKDIR /app
 COPY --from=builder /out/app /app/app
-VOLUME ["/data"]
+RUN mkdir -p /data
+RUN chown appuser:appuser /data
 EXPOSE 8081 8082 8083 12001 12002 12003
 USER appuser
+VOLUME ["/data"]
 ENTRYPOINT ["/app/app"]
