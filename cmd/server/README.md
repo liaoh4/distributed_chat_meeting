@@ -64,12 +64,70 @@ project structure
 └── internal/types/types.go
 ```
 
-docker compose up --build
+
+# 清空本地数据
+docker compose down
+rm -rf data/*
+
+
+# 整理和更新依赖关系
+ go mod tidy
+
+
+# 构建
+docker compose build
+docker compose up -d
+
+# 临时启动 node 并用join加入 raft
+docker compose --profile extra up -d node4
+
+curl -X POST http://localhost:8081/join \
+  -H 'Content-Type: application/json' \
+  -d '{"ID":"node4","RaftAddr":"node4:12004"}'
+
+
+# 查看状态
+curl -s http://localhost:8081/status | jq
+curl -s http://localhost:8082/status | jq
+curl -s http://localhost:8083/status | jq
+
+
+# 节点自行退出
+curl -X POST http://localhost:8083/leave
+
+
+# leader移除节点 node2
+curl -X DELETE http://localhost:8081/nodes/node2
+
+docker rm -f distributed_chat_meeting-node2-1
+
+rm -rf ./data/node2
+
+
+# docker临时停止节点
+docker compose stop node3
+rm -rf ./data/node3              
+
+
+# docker 启动节点
+docker compose up -d node3
+
+
+# 将被删除的节点重新加入raft
+curl -X POST http://localhost:8081/join \
+  -H 'Content-Type: application/json' \
+  -d '{"ID":"node2","RaftAddr":"node2:12002"}'
+
+
+# 启动删除节点
+docker compose rm -sf node4    # 如存在，先删除
+rm -rf ./data/node4              # 可选：清空它的旧数据，避免脏配置
+
 
 # 发消息
-curl -X POST http://localhost:8081/api/v1/message \
+curl -X POST http://localhost:8083/api/v1/message \
   -H 'Content-Type: application/json' \
-  -d '{"conv_id":"general","sender":"alice","payload":"hello","vector_clock":{"alice":1}}'
+  -d '{"conv_id":"general","sender":"node3","payload":"nonde 4, exit","vector_clock":{"alice":1}}'
 
 # 订阅（观察顺序）
 curl http://localhost:8081/api/v1/stream
@@ -93,3 +151,14 @@ curl -s 'http://localhost:8081/api/v1/stream?from=1'
 curl -s 'http://localhost:8082/api/v1/stream?from=1'
 
 curl -s 'http://localhost:8083/api/v1/stream?from=1'
+
+# 查看节点日志
+docker compose logs node3 --tail=80
+
+# 测试完后清理临时节点
+curl -X DELETE http://localhost:8081/nodes/node4  # 先从raft配置删除，leader节点才能执行该操作
+docker compose rm -sf node4 node5  #在停止并移除容器
+
+# 关闭并清除所有数据
+docker compose down -v --remove-orphans
+

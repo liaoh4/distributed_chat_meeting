@@ -10,13 +10,13 @@ services:
     environment:
       NODE_ID: node1
       HTTP_ADDR: ":8081"
-      RAFT_ADDR: "node1:12001"   # 可通告地址
+      RAFT_ADDR: "node1:12001" # 可通告地址
       BOOTSTRAP: "true"
     ports:
       - "8081:8081"
       - "12001:12001"
     volumes:
-      - ./data/node1:/data
+      - node1-data:/data
 
   node2:
     build: .
@@ -32,7 +32,7 @@ services:
       - "12002:12002"
     depends_on: [node1]
     volumes:
-      - ./data/node2:/data
+      - node2-data:/data
 
   node3:
     build: .
@@ -48,4 +48,42 @@ services:
       - "12003:12003"
     depends_on: [node1]
     volumes:
-      - ./data/node3:/data
+      - node3-data:/data
+
+  node4:
+    profiles: ["extra"]
+    build: .
+    hostname: node4 
+    networks: [chatnet]
+    environment:
+      NODE_ID: node4
+      HTTP_ADDR: ":8084"
+      RAFT_ADDR: "node4:12004" 
+    ports:
+      - "8084:8084" 
+      - "12004:12004"
+    tmpfs:
+      - /data:rw,size=64m,mode=777 
+    
+  node5:
+    profiles: ["extra"]
+    build: .
+    hostname: node5 
+    networks: [chatnet]
+    environment:
+      NODE_ID: node5
+      HTTP_ADDR: ":8085"
+      RAFT_ADDR: "node5:12005"    
+    ports:
+      - "8084:8084" 
+      - "12004:12004" 
+    tmpfs:
+      - /data:rw,size=64m,mode=777
+
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:
+  node4-data:
+  node5-data:
+

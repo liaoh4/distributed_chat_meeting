@@ -21,6 +21,8 @@ type Node struct {
 	fsm      *chat.FSM
 }
 
+
+
 func New(nodeID, httpAddr, raftAddr string, bootstrap bool) (*Node, error) {
 	dir := filepath.Join("/data")
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -99,3 +101,20 @@ func (n *Node) AddVoter(id, raftAddr string) error {
 }
 
 func (n *Node) FSM() *chat.FSM { return n.fsm }
+
+func (n *Node) GetID() string { return n.ID }
+
+func (n *Node) RemoveServer(id string) error {
+    return n.raft.RemoveServer(raft.ServerID(id), 0, 0).Error()
+}
+
+func (n *Node) Status() map[string]any {
+    stats := n.raft.Stats() // map[string]string
+    out := make(map[string]any, len(stats))
+    for k, v := range stats { out[k] = v }
+    // 也可以把 commitIndex/lastApplied 显式挑出来：
+    // out["commit_index"] = n.raft.CommitIndex()
+    // out["last_applied"] = n.raft.LastApplied()
+    return out
+}
+
