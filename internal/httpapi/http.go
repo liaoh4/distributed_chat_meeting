@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,6 +40,8 @@ func (a *API) Router() http.Handler {
 	r.Get("/api/v2/groups/{gid}/stream", a.handleStreamV2)               // 订阅某组
 	r.Get("/api/v2/groups/{gid}/status", a.handleStatusV2)               // 该组状态
 	r.Get("/api/v2/groups", a.handleListGroups)
+	r.Post("/api/v2/groups/{gid}/leave", a.handleLeaveV2) // ✅ 新增
+
 
 	// ---- v1: 单组兼容接口（默认绑定到 a.n）----
 	r.Post("/join", a.handleJoin)
@@ -472,6 +475,57 @@ func (a *API) handleListGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"groups": a.gm.ListIDs()})
 }
 
+
+// 自退：POST /api/v2/groups/{gid}/leave
+// 语义：让“当前节点”（在该组的 ID）离开组。
+// 规则：必须由组的 leader 执行；若本机不是 leader，则转发给 leader 的 /api/v2/groups/{gid}/nodes/{selfID}
+func (a *API) handleLeaveV2(w http.ResponseWriter, r *http.Request) {
+    g, gid, err := a.groupOf(r)
+    if err != nil { http.Error(w, err.Error(), http.StatusNotFound); return }
+
+    selfID := g.Node.GetID()
+
+    // 如果本机不是该组的 leader，转发到 leader 删除自己
+    if !g.Node.IsLeader() {
+        leaderRaft := g.Node.LeaderAddr()
+        if leaderRaft == "" {
+            http.Error(w, "no leader available", http.StatusServiceUnavailable)
+            return
+        }
+        // 约定映射：nodeX:1200Y -> nodeX:808Y
+        leaderHTTP := strings.Replace(leaderRaft, "1200", "808", 1)
+        url := fmt.Sprintf("http://%s/api/v2/groups/%s/nodes/%s", leaderHTTP, gid, selfID)
+
+        req, _ := http.NewRequest("DELETE", url, nil)
+        resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
+        if err != nil {
+            http.Error(w, "forward failed: "+err.Error(), http.StatusBadGateway)
+            return
+        }
+        defer resp.Body.Close()
+        w.WriteHeader(resp.StatusCode)
+        io.Copy(w, resp.Body)
+        return
+    }
+
+    // 本机是 leader：直接移除自己
+    if err := g.Node.RemoveServer(selfID); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    // （可选）等待配置落地一点点再返回，体验更好；也可直接返回 200。
+if ok := waitUntilRemoved(g, selfID, 5*time.Second); !ok {
+	log.Printf("[WARN] node %s removal not confirmed in time", selfID)
+    // 也可以仅记录日志，仍返回 200；这取决于你的 UX 取舍
+}
+	
+    // 这里简单返回：
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte("left"))
+}
+
+
 // ===== 公共小工具 =====
 
 func parseFrom(s string) uint64 {
@@ -517,4 +571,17 @@ func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 // 这样旧的 v1 接口 (/api/v1/...) 仍然可以正常工作。
 func (a *API) SetSingleNode(n *raftnode.Node) {
 	a.n = n
+}
+
+func waitUntilRemoved(g *multiraft.Group, id string, timeout time.Duration) bool {
+    deadline := time.Now().Add(timeout)
+    for time.Now().Before(deadline) {
+        st := g.Node.Status()
+        cfg, _ := st["latest_configuration"].(string)
+        if !strings.Contains(cfg, "ID:"+id+" ") { // 粗糙匹配，足够用了
+            return true
+        }
+        time.Sleep(150 * time.Millisecond)
+    }
+    return false
 }

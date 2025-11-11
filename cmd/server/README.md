@@ -174,6 +174,20 @@ curl -X POST http://localhost:8081/api/v2/groups/general/message \
   -H 'Content-Type: application/json' \
   -d '{"conv_id":"general","sender":"node1","payload":"Hello, world!"}'
 
+  # 测试用例
+for i in $(seq 1 6); do
+  node=$(( (i % 3) + 1 ))                     
+  port=$((8080 + node))                       
+  payload="msg-$i-from-node$node"
+  sender="u$node"
+  echo "POST -> $port : $payload"
+  curl -s -X POST "http://localhost:${port}/api/v2/groups/general/message" \
+    -H 'Content-Type: application/json' \
+    -d '{"conv_id":"general","sender":"'"$sender"'","payload":"'"$payload"'","vector_clock":{"'"$sender"'":'"$i"'}}'
+  echo
+done
+
+
 # 查看状态/订阅流
 
 curl http://localhost:8083/api/v2/groups/general/status | jq
@@ -181,8 +195,8 @@ curl http://localhost:8085/api/v2/groups/general/stream
 
 
 # 启动 node4（带 extra profile）
-docker compose build --no-cache node5
-docker compose --profile extra up -d node5
+docker compose build --no-cache node4
+docker compose --profile extra up -d node4
 
 # 在leader上执行join请求 （也可以不在leader上执行，因为follower会转发给leader）
 curl -X POST http://localhost:8081/api/v2/groups/general/join \
