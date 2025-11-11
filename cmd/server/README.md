@@ -16,7 +16,7 @@ rm -rf ./data/node1 ./data/node2 ./data/node3
 # 重新构建（清缓存）
 docker compose build --no-cache
 # 启动
-docker compose up
+docker compose up -d
 
 # 发送消息（任意节点均可；建议打到 node1）
 curl -X POST http://localhost:8081/api/v1/message \
@@ -162,3 +162,46 @@ docker compose rm -sf node4 node5  #停止并移除容器
 # 关闭并清除所有数据
 docker compose down -v --remove-orphans
 
+
+
+## ***********以下是V2内容**************
+
+# 构建并启动
+docker compose build --no-cache && docker compose up -d
+
+# 发消息
+curl -X POST http://localhost:8081/api/v2/groups/general/message \
+  -H 'Content-Type: application/json' \
+  -d '{"conv_id":"general","sender":"node1","payload":"Hello, world!"}'
+
+# 查看状态/订阅流
+
+curl http://localhost:8083/api/v2/groups/general/status | jq
+curl http://localhost:8085/api/v2/groups/general/stream
+
+
+# 启动 node4（带 extra profile）
+docker compose build --no-cache node5
+docker compose --profile extra up -d node5
+
+# 在leader上执行join请求 （也可以不在leader上执行，因为follower会转发给leader）
+curl -X POST http://localhost:8081/api/v2/groups/general/join \
+  -H 'Content-Type: application/json' \
+  -d '{"ID":"node5","RaftAddr":"node5:12005"}'
+
+# 查看日志
+docker compose logs node5 --tail=100
+
+# leader 执行delete
+curl -X DELETE http://localhost:8083/api/v2/groups/general/nodes/node4
+
+# 停止并删除容器
+docker compose stop node4 && docker compose rm -f node4
+
+
+# 测试完后清理临时节点
+curl -X DELETE http://localhost:8083/api/v2/groups/general/nodes/node4
+docker compose rm -sf node4 node5  #停止并移除容器
+
+# 关闭并清除所有数据
+docker compose down -v --remove-orphans
