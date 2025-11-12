@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,12 +21,12 @@ import (
 )
 
 type API struct {
-	n  *raftnode.Node         // v1 单组用
-	gm *multiraft.Manager     // v2 多组用
-    
+	n  *raftnode.Node     // v1 单组用
+	gm *multiraft.Manager // v2 多组用
+
 }
 
-func New(n *raftnode.Node) *API              { return &API{n: n} }
+func New(n *raftnode.Node) *API                 { return &API{n: n} }
 func NewWithManager(gm *multiraft.Manager) *API { return &API{gm: gm} }
 
 func (a *API) Router() http.Handler {
@@ -41,7 +42,6 @@ func (a *API) Router() http.Handler {
 	r.Get("/api/v2/groups/{gid}/status", a.handleStatusV2)               // 该组状态
 	r.Get("/api/v2/groups", a.handleListGroups)
 	r.Post("/api/v2/groups/{gid}/leave", a.handleLeaveV2) // ✅ 新增
-
 
 	// ---- v1: 单组兼容接口（默认绑定到 a.n）----
 	r.Post("/join", a.handleJoin)
@@ -59,6 +59,7 @@ func (a *API) Router() http.Handler {
 // ===== v1 单组 =====
 
 func (a *API) handleJoin(w http.ResponseWriter, r *http.Request) {
+
 	if a.n == nil {
 		http.Error(w, "single-raft node not configured", http.StatusNotFound)
 		return
@@ -78,7 +79,15 @@ func (a *API) handleJoin(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "no leader available", http.StatusServiceUnavailable)
 			return
 		}
-		url := "http://" + raftToHTTP(leaderRaft) + "/join"
+
+		leaderHTTP, err := raftToHTTP(leaderRaft)
+		if err != nil {
+			http.Error(w, "cannot map leader addr: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		
+		url := fmt.Sprintf("http://%s/join", leaderHTTP)
+
 		req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
@@ -107,6 +116,7 @@ func (a *API) handleJoin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handlePostMessage(w http.ResponseWriter, r *http.Request) {
+
 	if a.n == nil {
 		http.Error(w, "single-raft node not configured", http.StatusNotFound)
 		return
@@ -131,7 +141,13 @@ func (a *API) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "no leader available", http.StatusServiceUnavailable)
 			return
 		}
-		url := fmt.Sprintf("http://%s/api/v1/message", raftToHTTP(leaderRaft))
+		leaderHTTP, err := raftToHTTP(leaderRaft)
+		if err != nil {
+			http.Error(w, "cannot map leader addr: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		url := fmt.Sprintf("http://%s/api/v1/message", leaderHTTP)
+
 		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(raw))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -189,6 +205,7 @@ func (a *API) handleStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleLeave(w http.ResponseWriter, r *http.Request) {
+
 	if a.n == nil {
 		http.Error(w, "single-raft node not configured", http.StatusNotFound)
 		return
@@ -208,7 +225,12 @@ func (a *API) handleLeave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no leader available", http.StatusServiceUnavailable)
 		return
 	}
-	url := fmt.Sprintf("http://%s/nodes/%s", raftToHTTP(leaderRaft), id)
+	leaderHTTP, err := raftToHTTP(leaderRaft)
+	if err != nil {
+		http.Error(w, "cannot map leader addr: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	url := fmt.Sprintf("http://%s/leave", leaderHTTP)
 	req, _ := http.NewRequest(http.MethodDelete, url, nil)
 	resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
 	if err != nil {
@@ -221,6 +243,7 @@ func (a *API) handleLeave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
+
 	if a.n == nil {
 		http.Error(w, "single-raft node not configured", http.StatusNotFound)
 		return
@@ -236,7 +259,14 @@ func (a *API) handleRemoveNode(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "no leader available", http.StatusServiceUnavailable)
 			return
 		}
-		url := fmt.Sprintf("http://%s/nodes/%s", raftToHTTP(leaderRaft), id)
+
+		leaderHTTP, err := raftToHTTP(leaderRaft)
+		if err != nil {
+			http.Error(w, "cannot map leader addr: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		url := fmt.Sprintf("http://%s/nodes/%s", leaderHTTP, id)
+
 		req, _ := http.NewRequest(http.MethodDelete, url, nil)
 		resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
 		if err != nil {
@@ -331,7 +361,14 @@ func (a *API) handleJoinGroup(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "no leader", http.StatusServiceUnavailable)
 			return
 		}
-		url := fmt.Sprintf("http://%s/api/v2/groups/%s/join", raftToHTTP(leaderRaft), gid)
+
+		leaderHTTP, err := raftToHTTP(leaderRaft)
+		if err != nil {
+			http.Error(w, "cannot map leader addr: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		url := fmt.Sprintf("http://%s/api/v2/groups/%s/join", leaderHTTP, gid)
+
 		resp, err := http.Post(url, "application/json", bytes.NewReader(raw))
 		if err != nil {
 			http.Error(w, "forward failed: "+err.Error(), http.StatusBadGateway)
@@ -393,12 +430,21 @@ func (a *API) handlePostMessageV2(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !g.Node.IsLeader() {
-		leader := g.Node.LeaderAddr()
-		if leader == "" {
+		
+
+		leaderRaft := g.Node.LeaderAddr()
+		if leaderRaft == "" {
 			http.Error(w, "no leader available", http.StatusServiceUnavailable)
 			return
 		}
-		url := fmt.Sprintf("http://%s/api/v2/groups/%s/message", raftToHTTP(leader), gid)
+
+		leaderHTTP, err := raftToHTTP(leaderRaft)
+		if err != nil {
+			http.Error(w, "cannot map leader addr: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		url := fmt.Sprintf("http://%s/api/v2/groups/%s/message", leaderHTTP, gid)
+
 		resp, err := http.Post(url, "application/json", bytes.NewReader(raw))
 		if err != nil {
 			http.Error(w, "forward to leader failed: "+err.Error(), http.StatusBadGateway)
@@ -475,56 +521,63 @@ func (a *API) handleListGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"groups": a.gm.ListIDs()})
 }
 
-
 // 自退：POST /api/v2/groups/{gid}/leave
 // 语义：让“当前节点”（在该组的 ID）离开组。
 // 规则：必须由组的 leader 执行；若本机不是 leader，则转发给 leader 的 /api/v2/groups/{gid}/nodes/{selfID}
 func (a *API) handleLeaveV2(w http.ResponseWriter, r *http.Request) {
-    g, gid, err := a.groupOf(r)
-    if err != nil { http.Error(w, err.Error(), http.StatusNotFound); return }
+	g, gid, err := a.groupOf(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
 
-    selfID := g.Node.GetID()
+	selfID := g.Node.GetID()
 
-    // 如果本机不是该组的 leader，转发到 leader 删除自己
-    if !g.Node.IsLeader() {
-        leaderRaft := g.Node.LeaderAddr()
-        if leaderRaft == "" {
-            http.Error(w, "no leader available", http.StatusServiceUnavailable)
-            return
-        }
-        // 约定映射：nodeX:1200Y -> nodeX:808Y
-        leaderHTTP := strings.Replace(leaderRaft, "1200", "808", 1)
-        url := fmt.Sprintf("http://%s/api/v2/groups/%s/nodes/%s", leaderHTTP, gid, selfID)
+	// 如果本机不是该组的 leader，转发到 leader 删除自己
+	if !g.Node.IsLeader() {
+		leaderRaft := g.Node.LeaderAddr()
+		if leaderRaft == "" {
+			http.Error(w, "no leader available", http.StatusServiceUnavailable)
+			return
+		}
+		// 约定映射：nodeX:1200Y -> nodeX:808Y
 
-        req, _ := http.NewRequest("DELETE", url, nil)
-        resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
-        if err != nil {
-            http.Error(w, "forward failed: "+err.Error(), http.StatusBadGateway)
-            return
-        }
-        defer resp.Body.Close()
-        w.WriteHeader(resp.StatusCode)
-        io.Copy(w, resp.Body)
-        return
-    }
+		leaderHTTP, err := raftToHTTP(leaderRaft)
+		if err != nil {
+			http.Error(w, "cannot map leader addr: "+err.Error(), http.StatusBadGateway)
+			return
+		}
 
-    // 本机是 leader：直接移除自己
-    if err := g.Node.RemoveServer(selfID); err != nil {
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
+		url := fmt.Sprintf("http://%s/api/v2/groups/%s/nodes/%s", leaderHTTP, gid, selfID)
 
-    // （可选）等待配置落地一点点再返回，体验更好；也可直接返回 200。
-if ok := waitUntilRemoved(g, selfID, 5*time.Second); !ok {
-	log.Printf("[WARN] node %s removal not confirmed in time", selfID)
-    // 也可以仅记录日志，仍返回 200；这取决于你的 UX 取舍
+		req, _ := http.NewRequest("DELETE", url, nil)
+		resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
+		if err != nil {
+			http.Error(w, "forward failed: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+		return
+	}
+
+	// 本机是 leader：直接移除自己
+	if err := g.Node.RemoveServer(selfID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// （可选）等待配置落地一点点再返回，体验更好；也可直接返回 200。
+	if ok := waitUntilRemoved(g, selfID, 5*time.Second); !ok {
+		log.Printf("[WARN] node %s removal not confirmed in time", selfID)
+		// 也可以仅记录日志，仍返回 200；这取决于你的 UX 取舍
+	}
+
+	// 这里简单返回：
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("left"))
 }
-	
-    // 这里简单返回：
-    w.WriteHeader(http.StatusOK)
-    w.Write([]byte("left"))
-}
-
 
 // ===== 公共小工具 =====
 
@@ -557,13 +610,6 @@ func writeJSON(w http.ResponseWriter, v any) {
 }
 
 // 把 "node1:12001" -> "node1:8081"，简化你现有逻辑
-func raftToHTTP(raftAddr string) string {
-	parts := strings.Split(raftAddr, ":")
-	if len(parts) == 2 && strings.HasPrefix(parts[1], "1200") {
-		return parts[0] + ":" + strings.Replace(parts[1], "1200", "808", 1)
-	}
-	return raftAddr // 兜底：未按规则就原样返回
-}
 
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 
@@ -574,14 +620,28 @@ func (a *API) SetSingleNode(n *raftnode.Node) {
 }
 
 func waitUntilRemoved(g *multiraft.Group, id string, timeout time.Duration) bool {
-    deadline := time.Now().Add(timeout)
-    for time.Now().Before(deadline) {
-        st := g.Node.Status()
-        cfg, _ := st["latest_configuration"].(string)
-        if !strings.Contains(cfg, "ID:"+id+" ") { // 粗糙匹配，足够用了
-            return true
-        }
-        time.Sleep(150 * time.Millisecond)
-    }
-    return false
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		st := g.Node.Status()
+		cfg, _ := st["latest_configuration"].(string)
+		if !strings.Contains(cfg, "ID:"+id+" ") { // 粗糙匹配，足够用了
+			return true
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	return false
+}
+
+// raftToHTTP 将 "host:12abc" 映射成 "host:808x"，规则：取 Raft 端口最后一位，映射到 808x。
+// 例如：12001->8081, 12102->8082, 12203->8083 ...
+func raftToHTTP(raftAddr string) (string, error) {
+	host, portStr, err := net.SplitHostPort(raftAddr)
+	if err != nil {
+		return "", fmt.Errorf("bad raft addr %q: %v", raftAddr, err)
+	}
+	if len(portStr) < 5 || portStr[0:2] != "12" {
+		return "", fmt.Errorf("cannot map raft port %s to http", portStr)
+	}
+	last := portStr[len(portStr)-1:] // 取最后一位
+	return net.JoinHostPort(host, "808"+last), nil
 }
