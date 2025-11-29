@@ -10,7 +10,7 @@ services:
     environment:
       NODE_ID: node1
       HTTP_ADDR: ":8081"
-      RAFT_ADDR: "node1:12001" # 可通告地址
+      RAFT_ADDR: "node1:12001" 
       BOOTSTRAP: "true"
       GROUP_ID: "general"
     ports:
@@ -61,11 +61,11 @@ services:
     environment:
       NODE_ID: node4
       HTTP_ADDR: ":8084"
-      RAFT_ADDR: "node4:12004" 
-      GROUP_ID: "general"
+      RAFT_ADDR: "node4:12104" 
+      GROUP_ID: ""
     ports:
       - "8084:8084" 
-      - "12004:12004"
+      - "12104:12104"
     tmpfs:
       - /data:rw,size=64m,mode=777 
     
@@ -77,11 +77,11 @@ services:
     environment:
       NODE_ID: node5
       HTTP_ADDR: ":8085"
-      RAFT_ADDR: "node5:12005"    
-      GROUP_ID: "general"
+      RAFT_ADDR: "node5:12105"    
+      GROUP_ID: ""
     ports:
       - "8085:8085" 
-      - "12005:12005" 
+      - "12105:12105" 
     tmpfs:
       - /data:rw,size=64m,mode=777
 
