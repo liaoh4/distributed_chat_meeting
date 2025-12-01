@@ -55,7 +55,8 @@ func NewWithOpts(opt Options) (*Node, error) {
 
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(opt.ID)
-	config.SnapshotThreshold = 8192
+	config.SnapshotInterval = 20 * time.Second 
+	config.SnapshotThreshold = 2
 	config.HeartbeatTimeout = 200 * time.Millisecond
 	config.ElectionTimeout = 800 * time.Millisecond
 	config.LeaderLeaseTimeout = 200 * time.Millisecond // ≤ HeartbeatTimeout

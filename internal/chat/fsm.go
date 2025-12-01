@@ -53,17 +53,27 @@ func (f *FSM) Apply(l *raft.Log) any {
 	return nil
 }
 
+
 func (f *FSM) Snapshot() (raft.FSMSnapshot, error) {
-	// Minimal: no snapshot content (replay log on restore). For production, dump store.
-	return &noopSnapshot{}, nil
+    raw, err := f.store.Export()
+    if err != nil {
+		log.Printf("[DEBUG] Snapshot Export error: %v", err)
+        return nil, err
+    }
+	log.Printf("[DEBUG] Snapshot created: size=%d bytes", len(raw))
+    return &FSMSnapshot{Data: raw}, nil
 }
 
-func (f *FSM) Restore(rc io.ReadCloser) error { return nil }
+func (f *FSM) Restore(rc io.ReadCloser) error {
+    defer rc.Close()
+    data, err := io.ReadAll(rc)
+    if err != nil {
+        return err
+    }
+	log.Printf("[DEBUG] Restoring snapshot: size=%d bytes", len(data))
+    return f.store.Import(data)
+}
 
-type noopSnapshot struct{}
-
-func (n *noopSnapshot) Persist(sink raft.SnapshotSink) error { return sink.Close() }
-func (n *noopSnapshot) Release()                             {}
 
 // Publish utilities
 
@@ -75,3 +85,5 @@ func (f *FSM) Subscribe() (<-chan types.Message, func()) {
 	cancel := func() { f.subMu.Lock(); delete(f.subs, ch); close(ch); f.subMu.Unlock() }
 	return ch, cancel
 }
+
+

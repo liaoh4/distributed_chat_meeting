@@ -1,8 +1,10 @@
 package chat
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"os"
 	"sync"
 
 	"go.etcd.io/bbolt"
@@ -13,6 +15,7 @@ var bucketMessages = []byte("messages")
 type Store struct {
 	db *bbolt.DB
 	mu sync.RWMutex
+	path string
 }
 
 func NewStore(path string) (*Store, error) {
@@ -20,12 +23,18 @@ func NewStore(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	db.Update(func(tx *bbolt.Tx) error {
 		_, _ = tx.CreateBucketIfNotExists(bucketMessages)
 		return nil
 	})
-	return &Store{db: db}, nil
+
+	return &Store{
+		db:   db,
+		path: path,   // 🚀必须加上！！
+	}, nil
 }
+
 
 func (s *Store) Close() error { return s.db.Close() }
 
@@ -66,4 +75,31 @@ func (s *Store) Range(from uint64, fn func(idx uint64, raw []byte) error) error 
 		}
 		return nil
 	})
+}
+func (s *Store) Export() ([]byte, error) {
+    var buf bytes.Buffer
+	s.db.Batch(func(tx *bbolt.Tx) error { return nil })
+    err := s.db.View(func(tx *bbolt.Tx) error {
+        _, err := tx.WriteTo(&buf)
+        return err
+    })
+    return buf.Bytes(), err
+}
+
+func (s *Store) Import(data []byte) error {
+    // 关闭旧DB
+    s.db.Close()
+
+    // 覆盖文件
+    if err := os.WriteFile(s.path, data, 0644); err != nil {
+        return err
+    }
+
+    // 重新打开 DB
+    db, err := bbolt.Open(s.path, 0600, nil)
+    if err != nil {
+        return err
+    }
+    s.db = db
+    return nil
 }
