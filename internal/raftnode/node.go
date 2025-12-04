@@ -15,8 +15,8 @@ import (
 
 type Options struct {
 	ID        string
-	DataDir   string // ★ 每个组单独的数据目录，例如 /data/<groupID>
-	RaftAddr  string // ★ 本节点在该组内的可通告地址，例如 "node1:12101"
+	DataDir   string 
+	RaftAddr  string 
 	Bootstrap bool
 }
 
@@ -28,20 +28,20 @@ type Node struct {
 	raft *raft.Raft
 	fsm  *chat.FSM
 
-	// ★ 保留底层资源用于 Close()
+	
 	dataDir     string
 	logStore    *raftboltdb.BoltStore
 	stableStore *raftboltdb.BoltStore
 	snaps       *raft.FileSnapshotStore
 	transport   *raft.NetworkTransport
-	// 如果你的 chat.Store 需要关闭，可从 FSM 里拿出来关闭（见 Close）
+	
 }
 
-// ★ 新增：按 Options 构建（多组直接用这个）
+
 func NewWithOpts(opt Options) (*Node, error) {
 	dir := opt.DataDir
 	if dir == "" {
-		dir = "/data" // 兜底：不传就用 /data
+		dir = "/data" 
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func NewWithOpts(opt Options) (*Node, error) {
 		transport:  transport,
 	}
 
-	// ★ 仅在引导（该组第一个节点）时 BootstrapCluster
+	// ★ if it is the first node of the group, BootstrapCluster
 	if opt.Bootstrap {
 		configuration := raft.Configuration{
 			Servers: []raft.Server{{ID: raft.ServerID(opt.ID), Address: raft.ServerAddress(opt.RaftAddr)}},
@@ -111,7 +111,7 @@ func NewWithOpts(opt Options) (*Node, error) {
 	return n, nil
 }
 
-// ★ 原来的构造器保持兼容：复用 NewWithOpts，只是把 HTTPAddr 也存下来
+
 func New(nodeID, httpAddr, raftAddr string, bootstrap bool) (*Node, error) {
 	n, err := NewWithOpts(Options{
 		ID:        nodeID,
@@ -126,11 +126,11 @@ func New(nodeID, httpAddr, raftAddr string, bootstrap bool) (*Node, error) {
 	return n, nil
 }
 
-// 优雅关闭：按顺序关 Raft、传输与存储
+// graceful shutdown
 func (n *Node) Close() error {
 	if n.raft != nil {
 		f := n.raft.Shutdown()
-		_ = f.Error() // 忽略返回错误以继续清理其他资源
+		_ = f.Error() // ignore return error
 	}
 	if n.transport != nil {
 		_ = n.transport.Close()
@@ -141,8 +141,7 @@ func (n *Node) Close() error {
 	if n.stableStore != nil {
 		_ = n.stableStore.Close()
 	}
-	// FileSnapshotStore 没有 Close 方法，跳过
-	// 如需关闭 chat.Store，可在 FSM 暴露 Store() 并 Close：
+	
 	if n.fsm != nil && n.fsm.Store() != nil {
 		_ = n.fsm.Store().Close()
 	}
@@ -151,7 +150,6 @@ func (n *Node) Close() error {
 
 // Propose append message via Raft
 func (n *Node) AppendMessage(msg types.Message) error {
-	// 单组 MVP 固定会话；做多组时由上层按组设置
 	if msg.ConvID == "" {
 		msg.ConvID = "general"
 	}
@@ -185,8 +183,5 @@ func (n *Node) Status() map[string]any {
 	for k, v := range stats {
 		out[k] = v
 	}
-	// 也可补充显式数值指标：
-	// out["commit_index"] = n.raft.CommitIndex()
-	// out["last_applied"] = n.raft.LastApplied()
 	return out
 }

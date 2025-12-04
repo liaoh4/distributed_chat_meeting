@@ -10,11 +10,11 @@ import (
 )
 
 type GroupOptions struct {
-	GroupID   string // 例如 "general"、"room-123"
-	DataRoot  string // 例如 "/data"
-	RaftAddr  string // 本节点在该组的可通告地址，如 "node1:12101"
-	Bootstrap bool   // 是否由本节点引导该组（仅该组第一个节点为 true）
-	JoinTo    string // 可选：HTTP 地址（http://nodeX:808X），留空时由调用方自行 join
+	GroupID   string 
+	DataRoot  string 
+	RaftAddr  string 
+	Bootstrap bool   
+	JoinTo    string 
 }
 
 type Group struct {
@@ -38,7 +38,7 @@ func NewManager(nodeID, dataRoot string) *Manager {
 	}
 }
 
-// Get 返回组以及是否存在
+// Get: return the group if exists
 func (m *Manager) Get(id string) (*Group, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -46,7 +46,7 @@ func (m *Manager) Get(id string) (*Group, bool) {
 	return g, ok
 }
 
-// MustGet 不存在则 panic（可选）
+// MustGet if non-exists, then panic
 func (m *Manager) MustGet(id string) *Group {
 	if g, ok := m.Get(id); ok {
 		return g
@@ -54,7 +54,7 @@ func (m *Manager) MustGet(id string) *Group {
 	panic("group not found: " + id)
 }
 
-// ListIDs 返回所有组 ID，按字母序排序
+// ListIDs: return all groups has been in
 func (m *Manager) ListIDs() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -66,8 +66,7 @@ func (m *Manager) ListIDs() []string {
 	return out
 }
 
-// Create 在本机创建/引导一个组；如果 Bootstrap=true 则自举（形成单节点集群）
-// 注意：加入其它已有组的操作（join）建议在上层通过 HTTP /join 完成。
+// Create a group, if Bootstrap=true, become the leaderleader
 func (m *Manager) Create(opt GroupOptions) (*Group, error) {
 	if opt.GroupID == "" {
 		return nil, fmt.Errorf("group_id is required")
@@ -86,8 +85,8 @@ func (m *Manager) Create(opt GroupOptions) (*Group, error) {
 	dataDir := filepath.Join(m.DataRoot, opt.GroupID)
 
 	node, err := raftnode.NewWithOpts(raftnode.Options{
-		ID:        m.NodeID,   // 本机节点 ID（在所有组内一致）
-		DataDir:   dataDir,    // 形如 /data/<groupID>
+		ID:        m.NodeID,   
+		DataDir:   dataDir,    
 		RaftAddr:  opt.RaftAddr,
 		Bootstrap: opt.Bootstrap,
 	})
@@ -100,7 +99,7 @@ func (m *Manager) Create(opt GroupOptions) (*Group, error) {
 	return g, nil
 }
 
-// Remove 关闭并移除本机上的某个组
+// Remove: close and remove a group
 func (m *Manager) Remove(groupID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -114,7 +113,7 @@ func (m *Manager) Remove(groupID string) error {
 	return nil
 }
 
-// Shutdown 关闭本机上管理的所有组（优雅退出）
+// Shutdown all groups and graceful exit
 func (m *Manager) Shutdown() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

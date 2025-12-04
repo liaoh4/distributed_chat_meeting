@@ -33,14 +33,14 @@ func (a *API) Router() http.Handler {
 	r.Use(cors.AllowAll().Handler)
 
 	// ----  multi-raft groups ----
-	r.Post("/api/groups", a.handleCreateGroup)                        // 本机创建/引导某个组
-	r.Post("/api/groups/{gid}/join", a.handleJoinGroup)               // 把某节点加入该组（对组 leader 调用）
-	r.Delete("/api/groups/{gid}/nodes/{id}", a.handleRemoveGroupNode) // 从该组移除节点
-	r.Post("/api/groups/{gid}/message", a.handlePostMessage)        // 发消息到某组
-	r.Get("/api/groups/{gid}/stream", a.handleStream)               // 订阅某组
-	r.Get("/api/groups/{gid}/status", a.handleStatus)               // 该组状态
+	r.Post("/api/groups", a.handleCreateGroup)                        // create group
+	r.Post("/api/groups/{gid}/join", a.handleJoinGroup)               // add a node
+	r.Delete("/api/groups/{gid}/nodes/{id}", a.handleRemoveGroupNode) // leader delete a node
+	r.Post("/api/groups/{gid}/message", a.handlePostMessage)        // send message
+	r.Get("/api/groups/{gid}/stream", a.handleStream)               // subscribe a group
+	r.Get("/api/groups/{gid}/status", a.handleStatus)               // check status of a group
 	r.Get("/api/groups", a.handleListGroups)
-	r.Post("/api/groups/{gid}/leave", a.handleLeave) // ✅ 新增
+	r.Post("/api/groups/{gid}/leave", a.handleLeave) // node leaves
 
 	return r
 }
@@ -277,14 +277,14 @@ func (a *API) handleLeave(w http.ResponseWriter, r *http.Request) {
 
 	selfID := g.Node.GetID()
 
-	// 如果本机不是该组的 leader，转发到 leader 删除自己
+	// if current node is not the leader， forward the command to leader 
 	if !g.Node.IsLeader() {
 		leaderRaft := g.Node.LeaderAddr()
 		if leaderRaft == "" {
 			http.Error(w, "no leader available", http.StatusServiceUnavailable)
 			return
 		}
-		// 约定映射：nodeX:1200Y -> nodeX:808Y
+		// port mapping：nodeX:1200Y -> nodeX:808Y
 
 		leaderHTTP, err := raftToHTTP(leaderRaft)
 		if err != nil {
@@ -306,24 +306,24 @@ func (a *API) handleLeave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 本机是 leader：直接移除自己
+	// current node is the leader：remove itself
 	if err := g.Node.RemoveServer(selfID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// （可选）等待配置落地一点点再返回，体验更好；也可直接返回 200。
+	// 。
 	if ok := waitUntilRemoved(g, selfID, 5*time.Second); !ok {
 		log.Printf("[WARN] node %s removal not confirmed in time", selfID)
-		// 也可以仅记录日志，仍返回 200；这取决于你的 UX 取舍
+		
 	}
 
-	// 这里简单返回：
+	
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("left"))
 }
 
-// ===== 公共小工具 =====
+// ===== public widget =====
 
 func parseFrom(s string) uint64 {
 	if s == "" {
@@ -353,7 +353,6 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// 把 "node1:12001" -> "node1:8081"，简化你现有逻辑
 
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 
@@ -362,7 +361,7 @@ func waitUntilRemoved(g *multiraft.Group, id string, timeout time.Duration) bool
 	for time.Now().Before(deadline) {
 		st := g.Node.Status()
 		cfg, _ := st["latest_configuration"].(string)
-		if !strings.Contains(cfg, "ID:"+id+" ") { // 粗糙匹配，足够用了
+		if !strings.Contains(cfg, "ID:"+id+" ") { 
 			return true
 		}
 		time.Sleep(150 * time.Millisecond)
@@ -370,8 +369,8 @@ func waitUntilRemoved(g *multiraft.Group, id string, timeout time.Duration) bool
 	return false
 }
 
-// raftToHTTP 将 "host:12abc" 映射成 "host:808x"，规则：取 Raft 端口最后一位，映射到 808x。
-// 例如：12001->8081, 12102->8082, 12203->8083 ...
+// raftToHTTP maps "host:12abc" to "host:808x"
+
 func raftToHTTP(raftAddr string) (string, error) {
 	host, portStr, err := net.SplitHostPort(raftAddr)
 	if err != nil {
@@ -380,6 +379,6 @@ func raftToHTTP(raftAddr string) (string, error) {
 	if len(portStr) < 5 || portStr[0:2] != "12" {
 		return "", fmt.Errorf("cannot map raft port %s to http", portStr)
 	}
-	last := portStr[len(portStr)-1:] // 取最后一位
+	last := portStr[len(portStr)-1:] 
 	return net.JoinHostPort(host, "808"+last), nil
 }

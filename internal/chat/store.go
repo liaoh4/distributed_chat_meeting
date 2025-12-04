@@ -87,15 +87,15 @@ func (s *Store) Export() ([]byte, error) {
 }
 
 func (s *Store) Import(data []byte) error {
-    // 关闭旧DB
+    // close old DB
     s.db.Close()
 
-    // 覆盖文件
+    // overwrite the file
     if err := os.WriteFile(s.path, data, 0644); err != nil {
         return err
     }
 
-    // 重新打开 DB
+    // reopen DB
     db, err := bbolt.Open(s.path, 0600, nil)
     if err != nil {
         return err

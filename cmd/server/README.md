@@ -1,7 +1,6 @@
 # Build and run (run docker first)
 docker compose build --no-cache && docker compose up -d
 
-
 # view log (example)
 docker compose logs node5 --tail=100
 
