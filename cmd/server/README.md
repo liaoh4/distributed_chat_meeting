@@ -28,3 +28,5 @@ docker compose down
 rm -rf data/*
 go mod tidy
 
+# test 
+./test.sh
