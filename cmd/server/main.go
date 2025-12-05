@@ -13,7 +13,6 @@ import (
 	"example.com/dsms-chat/internal/multiraft"
 )
 
-// 不再使用默认值 fallback
 func getenv(k string) string {
 	return os.Getenv(k)
 }
@@ -21,7 +20,7 @@ func getenv(k string) string {
 func main() {
 	nodeID := getenv("NODE_ID")
 	httpAddr := getenv("HTTP_ADDR")
-	groupID := getenv("GROUP_ID") // ★ groupID 可以为空
+	groupID := getenv("GROUP_ID") 
 	raftAddr := getenv("RAFT_ADDR")
 	bootstrap := getenv("BOOTSTRAP") == "true"
 	joinAddr := getenv("JOIN_ADDR")
@@ -29,14 +28,14 @@ func main() {
 	gm := multiraft.NewManager(nodeID, "/data")
 	api := httpapi.NewWithManager(gm)
 
-	// ★ 如果 groupID 为空 → 启动为多组节点
+	// if groupID is empty, run multi-group mode
 	if groupID == "" {
 		log.Printf("[INFO] Node %s running in MULTI-GROUP MODE", nodeID)
 		startServer(httpAddr, api)
 		return
 	}
 
-	// ★ 创建默认组
+	// create default group
 	_, err := gm.Create(multiraft.GroupOptions{
 		GroupID:   groupID,
 		DataRoot:  "/data",
@@ -47,7 +46,7 @@ func main() {
 		log.Fatalf("create group %s failed: %v", groupID, err)
 	}
 
-	// ★ 自动 join（非 bootstrap）
+	// ★  automatically join（ bootstrap = faulse）
 	if !bootstrap && joinAddr != "" {
 		go autoJoin(nodeID, groupID, raftAddr, joinAddr)
 	}

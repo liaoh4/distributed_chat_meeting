@@ -24,10 +24,10 @@ sleep 3
 
 
 # =========================================================
-# 0) Message Ordering Test (general)
+# Case 1) Testing Message Ordering 
 # =========================================================
 echo "============================================="
-echo "0) message ordering (general)"
+echo "Case 1) Testing Message Ordering"
 echo "============================================="
 
 for i in $(seq 1 6); do
@@ -54,10 +54,10 @@ done
 
 
 # =========================================================
-# 1) Create Group SCU (horizontal scalability test)
+# Case 2) Create a New Group for Horizontal Scalability 
 # =========================================================
 echo "============================================="
-echo "1) create group scu"
+echo "Case 2) Create a New Group for Horizontal Scalability"
 echo "============================================="
 
 curl -s -X POST "$NODE1/api/groups" \
@@ -73,11 +73,14 @@ sleep 3
 curl -s "$NODE1/api/groups/$GROUP1/status" | jq
 echo
 
+
 # =========================================================
-# 2) Node2 joins SCU
+# Case 3) Adding New Members
 # =========================================================
+
+
 echo "============================================="
-echo "2) node2 joins scu"
+echo "Case 3) Adding New Members"
 echo "============================================="
 
 # local creation
@@ -101,15 +104,6 @@ curl -s -X POST "$NODE1/api/groups/$GROUP1/join" \
 echo "✔ node2 joined scu"
 echo
 
-
-
-# =========================================================
-# 3) Node3 joins SCU
-# =========================================================
-echo "============================================="
-echo "3) node3 joins scu"
-echo "============================================="
-
 curl -s -X POST "$NODE3/api/groups" \
   -H "Content-Type: application/json" \
   -d "{
@@ -129,15 +123,6 @@ curl -s -X POST "$NODE1/api/groups/$GROUP1/join" \
 echo "✔ node3 joined scu"
 echo
 
-
-
-# =========================================================
-# 4) Node4 joins SCU
-# =========================================================
-echo "============================================="
-echo "4) node4 joins scu"
-echo "============================================="
-
 curl -s -X POST "$NODE4/api/groups" \
   -H "Content-Type: application/json" \
   -d "{
@@ -156,12 +141,11 @@ curl -s -X POST "$NODE1/api/groups/$GROUP1/join" \
 echo "✔ node4 joined scu"
 echo
 
-
 # =========================================================
-# 5) Send messages to SCU
+# Case 4) Sending Messages  Within the SCU Group
 # =========================================================
 echo "============================================="
-echo "5) send message to scu"
+echo "Case 4) Sending Messages  Within the SCU Group"
 echo "============================================="
 
 for i in $(seq 1 4); do
@@ -183,12 +167,7 @@ echo "✔ message sent"
 echo
 
 
-
-# =========================================================
-# 6) SCU Stream Replay
-# =========================================================
-echo "============================================="
-echo "6) stream replay SCU"
+echo "stream replay SCU"
 echo "============================================="
 
 for P in 8081 8082 8083 8084; do
@@ -200,10 +179,10 @@ done
 
 
 # =========================================================
-# 7) Leader Election
+# Case 5) Leader Failure and Automatic Election
 # =========================================================
 echo "============================================="
-echo "7) leader election"
+echo "Case 5) Leader Failure and Automatic Election"
 echo "============================================="
 
 echo "node1 (old leader)"
@@ -219,10 +198,10 @@ echo
 
 
 # =========================================================
-# 8) Leave SCU
+# Case 6) Member Departure and Group Reconfiguration
 # =========================================================
 echo "============================================="
-echo "8) leave scu"
+echo "Case 6) Member Departure and Group Reconfiguration"
 echo "============================================="
 
 curl -s -X POST "$NODE4/api/groups/$GROUP1/leave"
@@ -232,10 +211,10 @@ echo
 
 
 # =========================================================
-# 9) Message Replication Test (node5)
+# Case 7) Late-Join Replication: Node5 Joining SCU
 # =========================================================
 echo "============================================="
-echo "9) message replication"
+echo "Case 7) Late-Join Replication: Node5 Joining SCU"
 echo "============================================="
 
 curl -s -X POST "$NODE5/api/groups" \
@@ -264,31 +243,20 @@ for P in 8082 8085; do
 done
 
 
-
 # =========================================================
-# 10) Horizontal scalability
+# Case 8) Multi-Group Scalability Test: Creating CSEN317
 # =========================================================
 echo "============================================="
-echo "10) horizontal scalability"
+echo "Case 8) Multi-Group Scalability Test: Creating CSEN317"
 echo "============================================="
-echo "Groups node3 joining"
-curl -s "$NODE3/api/groups" | jq
-echo
-
-# =========================================================
-# SUCCESSFUL SCENARIO – CREATE CSEN317
-# =========================================================
-echo "*********************************************"
-echo "Below is an Example for Successful Scenario"
-echo "*********************************************"
 docker compose restart node1
 sleep 3
 
 
 
-echo "============================================="
+echo 
 echo "1) node1 create csen317"
-echo "============================================="
+echo
 
 curl -s -X POST "$NODE1/api/groups" \
   -H "Content-Type: application/json" \
@@ -303,9 +271,9 @@ echo; echo "✔ csen317 created"
 echo
 
 
-echo "============================================="
+echo 
 echo "2) node4 / node5 create local instances"
-echo "============================================="
+echo 
 
 curl -s -X POST "$NODE4/api/groups" \
   -H "Content-Type: application/json" \
@@ -329,9 +297,9 @@ echo
 sleep 2
 
 
-echo "============================================="
+echo 
 echo "3) node4 / node5 join csen317"
-echo "============================================="
+echo
 
 curl -s -X POST "$NODE1/api/groups/$GROUP2/join" \
   -H "Content-Type: application/json" \
@@ -353,9 +321,9 @@ echo
 sleep 3
 
 
-echo "============================================="
+echo 
 echo "4) Clients send messages to csen317"
-echo "============================================="
+echo 
 
 curl -s -X POST "$NODE1/api/groups/$GROUP2/message" \
   -H "Content-Type: application/json" \
@@ -385,9 +353,9 @@ echo "✔ csen317 message sent"
 echo
 
 
-echo "============================================="
+echo 
 echo "5) Message replay csen317"
-echo "============================================="
+echo 
 
 for P in 8081 8084 8085; do
   echo "---- node on :$P ----"
